@@ -1,88 +1,48 @@
-// src/App.jsx
-import React, { useState } from 'react';
+// frontend/src/App.jsx
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import MainLayout from './components/MainLayout';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Conversations from './pages/Conversations';
 import LeadsPipeline from './pages/LeadsPipeline';
-import QRCodeIntegration from './pages/QRCodeIntegration';
-import Calendar from './pages/Calendar';
-import Analytics from './pages/Analytics';
 import Contacts from './pages/Contacts';
-import Messages from './pages/Messages';
-import Sidebar from './components/Sidebar';
-import { mockUser } from './data/mockData';
-import { Menu, X } from 'lucide-react';
+import Campaigns from './pages/Campaigns';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
+import AutomationSettings from './pages/AutomationSettings';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setActiveMenu('dashboard');
-  };
-
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
-
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Overlay para mobile */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div className={`fixed lg:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
-        <Sidebar 
-          user={mockUser} 
-          activeMenu={activeMenu} 
-          setActiveMenu={(menu) => {
-            setActiveMenu(menu);
-            setSidebarOpen(false);
-          }} 
-        />
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile Header */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-gray-600 hover:text-gray-900"
-          >
-            <Menu size={24} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          {activeMenu === 'dashboard' && <Dashboard />}
-          {activeMenu === 'pipeline' && <LeadsPipeline />}
-          {activeMenu === 'leads' && <Contacts />}
-          {activeMenu === 'messages' && <Messages />}
-          {activeMenu === 'qrcode' && <QRCodeIntegration />}
-          {activeMenu === 'calendar' && <Calendar />}
-          {activeMenu === 'analytics' && <Analytics />}
-          {activeMenu === 'settings' && (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-gray-500">Configurações em desenvolvimento...</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          {/* Rotas públicas */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          {/* Rotas protegidas */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="conversations" element={<Conversations />} />
+            <Route path="pipeline" element={<LeadsPipeline />} />
+            <Route path="contacts" element={<Contacts />} />
+            <Route path="campaigns" element={<Campaigns />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="automation" element={<AutomationSettings />} />
+          </Route>
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 
