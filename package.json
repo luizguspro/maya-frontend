@@ -1,13 +1,13 @@
 {
-  "name": "crm-corretores",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@maya-crm/frontend",
+  "version": "1.0.0",
+  "description": "Maya CRM Frontend Application",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
     "axios": "^1.10.0",
@@ -15,8 +15,8 @@
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^7.6.3",
-    "recharts": "^3.1.0",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^2.12.7",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {

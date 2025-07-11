@@ -30,7 +30,10 @@ export const AuthProvider = ({ children }) => {
           
           // Buscar dados do usuário
           const response = await api.get('/auth/me');
-          setUser(response.data.usuario);
+          
+          // Ajustar para aceitar tanto 'user' quanto 'usuario'
+          const userData = response.data.user || response.data.usuario;
+          setUser(userData);
         } catch (error) {
           console.error('Erro ao carregar usuário:', error);
           // Token inválido, limpar
@@ -49,9 +52,17 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, senha) => {
     try {
       setError(null);
-      const response = await api.post('/auth/login', { email, senha });
+      console.log('Tentando login com:', { email });
       
-      const { usuario, token } = response.data;
+      const response = await api.post('/auth/login', { email, senha });
+      console.log('Resposta do login:', response.data);
+      
+      // Ajustar para o formato que o backend retorna
+      const { token, user, success } = response.data;
+      
+      if (!success || !token) {
+        throw new Error('Resposta inválida do servidor');
+      }
       
       // Salvar token
       Cookies.set('maya-token', token, { expires: 7 }); // 7 dias
@@ -60,11 +71,14 @@ export const AuthProvider = ({ children }) => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       // Salvar usuário no estado
-      setUser(usuario);
+      setUser(user);
+      
+      console.log('Login bem-sucedido, usuário:', user);
       
       return { success: true };
     } catch (error) {
-      const errorMessage = error.response?.data?.error || 'Erro ao fazer login';
+      console.error('Erro no login:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Erro ao fazer login';
       setError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -76,7 +90,12 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       const response = await api.post('/auth/register', dados);
       
-      const { usuario, token } = response.data;
+      // Ajustar para o formato que o backend retorna
+      const { token, user, success } = response.data;
+      
+      if (!success || !token) {
+        throw new Error('Resposta inválida do servidor');
+      }
       
       // Salvar token
       Cookies.set('maya-token', token, { expires: 7 });
@@ -85,7 +104,7 @@ export const AuthProvider = ({ children }) => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       // Salvar usuário no estado
-      setUser(usuario);
+      setUser(user);
       
       return { success: true };
     } catch (error) {
