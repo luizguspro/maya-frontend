@@ -1,6 +1,5 @@
 // frontend/src/services/api.js
 import axios from 'axios';
-import { io } from 'socket.io-client';
 
 // Configuração base do axios
 const api = axios.create({
@@ -9,31 +8,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-// Configuração do Socket.io
-let socket = null;
-
-export const initSocket = () => {
-  if (!socket) {
-    socket = io('http://localhost:3001', {
-      transports: ['websocket'],
-    });
-
-    socket.on('connect', () => {
-      console.log('Socket conectado:', socket.id);
-      // Entrar na sala da empresa
-      const empresaId = process.env.DEFAULT_EMPRESA_ID || '00000000-0000-0000-0000-000000000001';
-      socket.emit('join-company', empresaId);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Socket desconectado');
-    });
-  }
-  return socket;
-};
-
-export const getSocket = () => socket;
 
 // Interceptor para adicionar token se existir
 api.interceptors.request.use(
@@ -49,12 +23,36 @@ api.interceptors.request.use(
   }
 );
 
+// Interceptor para tratar erros
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token inválido ou expirado
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Serviços da API
+export const authService = {
+  login: (credentials) => api.post('/auth/login', credentials),
+  register: (data) => api.post('/auth/register', data),
+  logout: () => api.post('/auth/logout'),
+  getMe: () => api.get('/auth/me'),
+  verifyToken: () => api.get('/auth/verify'),
+};
+
 export const dashboardService = {
   getKPIs: () => api.get('/dashboard/kpis'),
   getRecentActivities: () => api.get('/dashboard/recent-activities'),
-  getPerformanceData: () => api.get('/dashboard/performance-data'),
+  getPerformanceData: (days = 30) => api.get(`/dashboard/performance-data?days=${days}`),
   getChannelPerformance: () => api.get('/dashboard/channel-performance'),
+  getSalesFunnel: () => api.get('/dashboard/sales-funnel'),
+  getTopSellers: () => api.get('/dashboard/top-sellers'),
+  getMetricsSummary: () => api.get('/dashboard/metrics-summary'),
 };
 
 export const conversationService = {
@@ -74,35 +72,45 @@ export const pipelineService = {
   deleteDeal: (dealId) => api.delete(`/pipeline/deals/${dealId}`),
 };
 
-export const contactsService = {
+export const contactService = {
   getAll: (params) => api.get('/contacts', { params }),
   getById: (id) => api.get(`/contacts/${id}`),
   create: (data) => api.post('/contacts', data),
   update: (id, data) => api.put(`/contacts/${id}`, data),
   delete: (id) => api.delete(`/contacts/${id}`),
-  importCSV: (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return api.post('/contacts/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  },
-  export: () => api.get('/contacts/export', { responseType: 'blob' }),
+  bulkImport: (data) => api.post('/contacts/bulk-import', data),
 };
 
+// Alias para compatibilidade
+export const contactsService = contactService;
+
 export const automationService = {
-  // Status e controle
   getStatus: () => api.get('/automation/status'),
   start: () => api.post('/automation/start'),
   stop: () => api.post('/automation/stop'),
   runNow: () => api.post('/automation/run-now'),
-  
-  // Fluxos
-  getFlows: () => api.get('/automation/flows'),
-  updateFlow: (flowId, data) => api.put(`/automation/flows/${flowId}`, data),
-  
-  // Histórico
-  getHistory: (params) => api.get('/automation/history', { params }),
 };
+
+export const campaignService = {
+  getAll: (params) => api.get('/campaigns', { params }),
+  getById: (id) => api.get(`/campaigns/${id}`),
+  create: (data) => api.post('/campaigns', data),
+  update: (id, data) => api.put(`/campaigns/${id}`, data),
+  delete: (id) => api.delete(`/campaigns/${id}`),
+  start: (id) => api.post(`/campaigns/${id}/start`),
+  pause: (id) => api.post(`/campaigns/${id}/pause`),
+  getStats: (id) => api.get(`/campaigns/${id}/stats`),
+};
+
+export const reportService = {
+  getDashboard: (params) => api.get('/reports/dashboard', { params }),
+  getConversions: (params) => api.get('/reports/conversions', { params }),
+  getChannels: (params) => api.get('/reports/channels', { params }),
+  exportData: (type, params) => api.get(`/reports/export/${type}`, { params, responseType: 'blob' }),
+};
+
+// Adicionar aliases que podem estar sendo usados em outras páginas
+export const pipelinesService = pipelineService;
+export const conversationsService = conversationService;
 
 export default api;

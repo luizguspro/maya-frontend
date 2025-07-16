@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, MessageSquare, Users, Target, BarChart3, Settings,
-  Menu, X, ChevronDown, Bell, Search, Zap, Building2, UserCircle
+  Menu, X, ChevronDown, Bell, Search, Zap, Building2, UserCircle, QrCode
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -22,6 +22,7 @@ const MainLayout = () => {
   const menuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/conversations', icon: MessageSquare, label: 'Conversas' },
+    { path: '/qrcode', icon: QrCode, label: 'WhatsApp QR Code' },
     { path: '/pipeline', icon: Target, label: 'Pipeline' },
     { path: '/contacts', icon: Users, label: 'Contatos' },
     { path: '/campaigns', icon: BarChart3, label: 'Campanhas' },

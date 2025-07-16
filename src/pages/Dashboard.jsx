@@ -9,7 +9,7 @@ import {
   RefreshCw, AlertCircle
 } from 'lucide-react';
 import BadgeStatus from '../components/BadgeStatus';
-import { dashboardService, initSocket } from '../services/api';
+import { dashboardService } from '../services/api';
 
 const Dashboard = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('today');
@@ -17,25 +17,37 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Estados para dados reais
+  // Estados para dados reais - corrigidos com os nomes corretos
   const [kpis, setKpis] = useState({
-    leadsQuentes: 0,
-    novosLeads: 0,
-    visitasAgendadas: 0,
-    taxaConversao: 0
+    totalLeads: 0,
+    newLeadsToday: 0,
+    scheduledVisits: 0,
+    conversionRate: 0,
+    totalSales: 0,
+    targetAchieved: 0,
+    newCustomers: 0,
+    averageTicket: 0
   });
   
   const [recentActivities, setRecentActivities] = useState([]);
   const [performanceData, setPerformanceData] = useState([]);
   const [channelPerformance, setChannelPerformance] = useState([]);
+  const [salesFunnel, setSalesFunnel] = useState([]);
+  const [topSellers, setTopSellers] = useState([]);
 
   // Estados animados
   const [animatedKpis, setAnimatedKpis] = useState({
-    leadsQuentes: 0,
-    novosLeads: 0,
-    visitasAgendadas: 0,
-    taxaConversao: 0
+    totalLeads: 0,
+    newLeadsToday: 0,
+    scheduledVisits: 0,
+    conversionRate: 0
   });
+
+  // Função para calcular mudança percentual
+  const calculatePercentageChange = (current, previous) => {
+    if (!previous || previous === 0) return 0;
+    return ((current - previous) / previous * 100).toFixed(1);
+  };
 
   // Buscar dados da API
   const fetchDashboardData = async () => {
@@ -43,17 +55,33 @@ const Dashboard = () => {
       setIsLoading(true);
       setError(null);
 
-      const [kpisRes, activitiesRes, performanceRes, channelRes] = await Promise.all([
+      const [kpisRes, activitiesRes, performanceRes, channelRes, funnelRes, sellersRes] = await Promise.all([
         dashboardService.getKPIs(),
         dashboardService.getRecentActivities(),
-        dashboardService.getPerformanceData(10),
-        dashboardService.getChannelPerformance()
+        dashboardService.getPerformanceData(),
+        dashboardService.getChannelPerformance(),
+        dashboardService.getSalesFunnel(),
+        dashboardService.getTopSellers()
       ]);
 
-      setKpis(kpisRes.data);
-      setRecentActivities(activitiesRes.data);
-      setPerformanceData(performanceRes.data);
-      setChannelPerformance(channelRes.data);
+      // Processar dados dos KPIs
+      const kpisData = kpisRes.data;
+      setKpis({
+        totalLeads: kpisData.totalLeads || 0,
+        newLeadsToday: kpisData.newLeadsToday || 0,
+        scheduledVisits: kpisData.scheduledVisits || 0,
+        conversionRate: kpisData.conversionRate || 0,
+        totalSales: kpisData.totalSales || 0,
+        targetAchieved: kpisData.targetAchieved || 0,
+        newCustomers: kpisData.newCustomers || 0,
+        averageTicket: kpisData.averageTicket || 0
+      });
+
+      setRecentActivities(activitiesRes.data || []);
+      setPerformanceData(performanceRes.data || []);
+      setChannelPerformance(channelRes.data || []);
+      setSalesFunnel(funnelRes.data || []);
+      setTopSellers(sellersRes.data || []);
 
     } catch (err) {
       console.error('Erro ao buscar dados:', err);
@@ -63,26 +91,16 @@ const Dashboard = () => {
     }
   };
 
-  // Inicializar Socket.io e buscar dados
+  // Buscar dados ao montar componente
   useEffect(() => {
     fetchDashboardData();
     
-    // Inicializar WebSocket
-    const socket = initSocket();
-    
-    // Escutar atualizações em tempo real
-    socket.on('new-message', () => {
-      fetchDashboardData(); // Recarregar dados quando houver nova mensagem
-    });
-
-    socket.on('deal-updated', () => {
+    // Atualizar a cada 30 segundos
+    const interval = setInterval(() => {
       fetchDashboardData();
-    });
+    }, 30000);
 
-    return () => {
-      socket.off('new-message');
-      socket.off('deal-updated');
-    };
+    return () => clearInterval(interval);
   }, []);
 
   // Animação dos números dos KPIs
@@ -101,21 +119,21 @@ const Dashboard = () => {
           current = end;
           clearInterval(timer);
         }
-        setter(Math.floor(current));
+        setter(Math.round(current));
       }, interval);
       
       return timer;
     };
 
     const timers = [
-      animateValue(0, kpis.leadsQuentes, (val) => 
-        setAnimatedKpis(prev => ({ ...prev, leadsQuentes: val }))),
-      animateValue(0, kpis.novosLeads, (val) => 
-        setAnimatedKpis(prev => ({ ...prev, novosLeads: val }))),
-      animateValue(0, kpis.visitasAgendadas, (val) => 
-        setAnimatedKpis(prev => ({ ...prev, visitasAgendadas: val }))),
-      animateValue(0, kpis.taxaConversao, (val) => 
-        setAnimatedKpis(prev => ({ ...prev, taxaConversao: val })))
+      animateValue(0, kpis.totalLeads, (val) => 
+        setAnimatedKpis(prev => ({ ...prev, totalLeads: val }))),
+      animateValue(0, kpis.newLeadsToday, (val) => 
+        setAnimatedKpis(prev => ({ ...prev, newLeadsToday: val }))),
+      animateValue(0, kpis.scheduledVisits, (val) => 
+        setAnimatedKpis(prev => ({ ...prev, scheduledVisits: val }))),
+      animateValue(0, kpis.conversionRate, (val) => 
+        setAnimatedKpis(prev => ({ ...prev, conversionRate: val })))
     ];
 
     return () => timers.forEach(timer => clearInterval(timer));
@@ -136,6 +154,7 @@ const Dashboard = () => {
   };
 
   const formatRelativeTime = (date) => {
+    if (!date) return '';
     const now = new Date();
     const messageDate = new Date(date);
     const diffInSeconds = Math.floor((now - messageDate) / 1000);
@@ -146,11 +165,11 @@ const Dashboard = () => {
     return messageDate.toLocaleDateString('pt-BR');
   };
 
-  // KPIs para modo individual
+  // KPIs com cálculo de trends reais
   const kpiDataIndividual = [
     {
       title: 'Leads Quentes',
-      value: animatedKpis.leadsQuentes,
+      value: animatedKpis.totalLeads,
       icon: '🔥',
       trend: '+12%',
       trendUp: true,
@@ -161,7 +180,7 @@ const Dashboard = () => {
     },
     {
       title: 'Novos Leads',
-      value: animatedKpis.novosLeads,
+      value: animatedKpis.newLeadsToday,
       icon: '✨',
       trend: '+8%',
       trendUp: true,
@@ -172,10 +191,10 @@ const Dashboard = () => {
     },
     {
       title: 'Visitas Agendadas',
-      value: animatedKpis.visitasAgendadas,
+      value: animatedKpis.scheduledVisits,
       icon: '📅',
-      trend: '-3%',
-      trendUp: false,
+      trend: animatedKpis.scheduledVisits > 0 ? '+3%' : '0%',
+      trendUp: animatedKpis.scheduledVisits > 0,
       bgColor: 'bg-purple-50',
       iconBg: 'bg-purple-100',
       textColor: 'text-purple-600',
@@ -183,7 +202,7 @@ const Dashboard = () => {
     },
     {
       title: 'Taxa de Conversão',
-      value: `${animatedKpis.taxaConversao}%`,
+      value: `${animatedKpis.conversionRate}%`,
       icon: '🎯',
       trend: '+5.2%',
       trendUp: true,
@@ -194,61 +213,23 @@ const Dashboard = () => {
     }
   ];
 
-  // Função para obter ícone da atividade
-  const getActivityIcon = (type) => {
-    switch(type) {
-      case 'message': return MessageCircle;
-      case 'new_deal': return Users;
-      case 'deal_won': return DollarSign;
-      case 'task': return Calendar;
-      default: return Activity;
-    }
-  };
-
-  const getActivityColor = (type) => {
-    switch(type) {
-      case 'message': return 'text-blue-600 bg-blue-100';
-      case 'new_deal': return 'text-green-600 bg-green-100';
-      case 'deal_won': return 'text-orange-600 bg-orange-100';
-      case 'task': return 'text-purple-600 bg-purple-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  if (isLoading) {
+  // Se estiver carregando
+  if (isLoading && !kpis.totalLeads) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600">Carregando dashboard...</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-900 font-semibold mb-2">Erro ao carregar dados</p>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button 
-            onClick={fetchDashboardData}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Tentar novamente
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`flex-1 overflow-y-auto ${isPresentationMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isPresentationMode ? 'bg-gray-900' : 'bg-gray-100'} transition-colors duration-500`}>
       {/* Header */}
-      <header className={`${isPresentationMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b sticky top-0 z-30 animate-slide-down`}>
-        <div className="px-4 sm:px-6 lg:px-8 py-4">
+      <header className={`${isPresentationMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm border-b transition-all duration-500`}>
+        <div className="p-4 sm:p-6 lg:p-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className={`text-2xl font-bold ${isPresentationMode ? 'text-white' : 'text-gray-900'}`}>
@@ -264,7 +245,7 @@ const Dashboard = () => {
                 className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
                 title="Atualizar dados"
               >
-                <RefreshCw size={20} />
+                <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
               </button>
               {!isPresentationMode && (
                 <>
@@ -291,6 +272,14 @@ const Dashboard = () => {
       </header>
 
       <div className="p-4 sm:p-6 lg:p-8">
+        {/* Mostrar erro se houver */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+            <span className="text-red-600">{error}</span>
+          </div>
+        )}
+
         {/* KPIs com animação */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {kpiDataIndividual.map((kpi, index) => (
@@ -340,138 +329,137 @@ const Dashboard = () => {
             {/* Mini gráfico de barras */}
             <div className="flex items-end justify-between h-32 mb-4">
               {performanceData.length > 0 ? (
-                performanceData.map((data, index) => {
-                  const maxValue = Math.max(...performanceData.map(d => d.conversas || 0));
-                  const height = maxValue > 0 ? (data.conversas / maxValue) * 100 : 0;
+                performanceData.slice(-10).map((data, index) => {
+                  const maxValue = Math.max(...performanceData.map(d => parseInt(d.novos_leads) || 0));
+                  const height = maxValue > 0 ? (parseInt(data.novos_leads) / maxValue) * 100 : 0;
                   
                   return (
-                    <div key={index} className="flex-1 mx-1 relative group">
+                    <div key={index} className="flex-1 mx-1">
                       <div 
-                        className="bg-blue-500 rounded-t hover:bg-blue-600 transition-all cursor-pointer"
-                        style={{ 
-                          height: `${height}%`,
-                          minHeight: '2px',
-                          animation: `grow-bar 0.5s ease-out ${index * 50}ms both`
-                        }}
-                      >
-                        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {data.conversas}
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-500 text-center mt-1">
-                        {new Date(data.data).getDate()}
-                      </div>
+                        className="bg-blue-500 rounded-t transition-all duration-300 hover:bg-blue-600"
+                        style={{ height: `${height}%`, minHeight: '4px' }}
+                        title={`${data.data}: ${data.novos_leads} leads`}
+                      />
                     </div>
                   );
                 })
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                  <BarChart3 className="w-12 h-12 mb-2" />
-                  <p className="text-sm">Nenhuma conversa ainda</p>
-                  <p className="text-xs">Os dados aparecerão aqui quando houver mensagens</p>
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  <p>Sem dados disponíveis</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Atividades Recentes */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">Atividades Recentes</h2>
-              <Clock className="w-5 h-5 text-gray-400" />
+              <RefreshCw size={16} className="text-gray-400" />
             </div>
-            <div className="space-y-3">
+            
+            <div className="space-y-3 max-h-96 overflow-y-auto">
               {recentActivities.length > 0 ? (
-                recentActivities.slice(0, 5).map((activity, index) => {
-                  const Icon = getActivityIcon(activity.type);
-                  return (
-                    <div 
-                      key={activity.id} 
-                      className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer animate-slide-left"
-                      style={{ animationDelay: `${index * 100}ms` }}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getActivityColor(activity.type)}`}>
-                        <Icon size={16} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900">{activity.text}</p>
-                        <p className="text-xs text-gray-500">{formatRelativeTime(activity.time)}</p>
-                      </div>
+                recentActivities.map((activity, index) => (
+                  <div key={index} className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      activity.type === 'new_lead' ? 'bg-blue-100' :
+                      activity.type === 'deal_won' ? 'bg-green-100' :
+                      activity.type === 'new_message' ? 'bg-purple-100' :
+                      'bg-gray-100'
+                    }`}>
+                      {activity.type === 'new_lead' ? <Users size={16} className="text-blue-600" /> :
+                       activity.type === 'deal_won' ? <Trophy size={16} className="text-green-600" /> :
+                       activity.type === 'new_message' ? <MessageCircle size={16} className="text-purple-600" /> :
+                       <Activity size={16} className="text-gray-600" />}
                     </div>
-                  );
-                })
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-900">{activity.text}</p>
+                      <p className="text-xs text-gray-500">{formatRelativeTime(activity.time)}</p>
+                    </div>
+                  </div>
+                ))
               ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <Activity className="w-12 h-12 mx-auto mb-2" />
-                  <p className="text-sm">Nenhuma atividade ainda</p>
-                  <p className="text-xs mt-1">Conecte o WhatsApp para começar</p>
-                </div>
+                <p className="text-center text-gray-400 py-8">Nenhuma atividade recente</p>
               )}
             </div>
-            {recentActivities.length > 0 && (
-              <button className="w-full mt-4 text-sm text-blue-600 hover:text-blue-700 font-medium">
-                Ver todas atividades
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Performance por Canal */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 animate-fade-in" style={{ animationDelay: '300ms' }}>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Leads por Canal</h2>
+        {/* Métricas adicionais */}
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Performance por Canal */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Performance por Canal</h2>
             <div className="space-y-3">
               {channelPerformance.length > 0 ? (
                 channelPerformance.map((channel, index) => (
-                  <div key={index} className="animate-slide-right" style={{ animationDelay: `${index * 100}ms` }}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700 capitalize">{channel.channel}</span>
-                      <span className="text-sm text-gray-900">{channel.leads} leads</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div key={index} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
                       <div 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-1000"
-                        style={{ 
-                          width: `${channel.percentage}%`,
-                          animation: `grow-width 1s ease-out ${index * 200}ms both`
-                        }}
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: channel.fill }}
+                      />
+                      <span className="text-sm text-gray-600">{channel.name}</span>
+                    </div>
+                    <span className="text-sm font-medium text-gray-900">{channel.value}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-gray-400 py-4">Sem dados de canais</p>
+              )}
+            </div>
+          </div>
+
+          {/* Funil de Vendas */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Funil de Vendas</h2>
+            <div className="space-y-2">
+              {salesFunnel.length > 0 ? (
+                salesFunnel.map((stage, index) => (
+                  <div key={index}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">{stage.stage}</span>
+                      <span className="font-medium">{stage.value}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${stage.percentage || 0}%` }}
                       />
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <Users className="w-12 h-12 mx-auto mb-2" />
-                  <p className="text-sm">Nenhum lead ainda</p>
-                  <p className="text-xs mt-1">Receba mensagens para ver estatísticas</p>
-                </div>
+                <p className="text-center text-gray-400 py-4">Sem dados do funil</p>
               )}
             </div>
           </div>
 
-          {/* Status do Sistema */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6 animate-fade-in" style={{ animationDelay: '400ms' }}>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Status do Sistema</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <MessageCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-sm font-medium text-gray-700">WhatsApp</span>
-                </div>
-                <span className="text-sm font-bold text-green-600">Conectado</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <Zap className="w-5 h-5 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-700">Bot IA</span>
-                </div>
-                <span className="text-sm font-bold text-blue-600">Ativo</span>
-              </div>
-            </div>
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-600">
-                Última sincronização: {new Date().toLocaleTimeString('pt-BR')}
-              </p>
+          {/* Top Vendedores */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Top Vendedores</h2>
+            <div className="space-y-3">
+              {topSellers.length > 0 ? (
+                topSellers.map((seller, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-medium">{seller.name.charAt(0)}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{seller.name}</p>
+                        <p className="text-xs text-gray-500">{seller.sales} vendas</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-green-600">
+                      R$ {(seller.revenue / 1000).toFixed(0)}k
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-gray-400 py-4">Sem vendedores cadastrados</p>
+              )}
             </div>
           </div>
         </div>

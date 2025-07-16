@@ -14,6 +14,7 @@ import Campaigns from './pages/Campaigns';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import AutomationSettings from './pages/AutomationSettings';
+import QRCodeIntegration from './pages/QRCodeIntegration'; // ADICIONAR ESTA LINHA
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automation" element={<AutomationSettings />} />
+            <Route path="qrcode" element={<QRCodeIntegration />} /> {/* ADICIONAR ESTA LINHA */}
           </Route>
         </Routes>
       </Router>

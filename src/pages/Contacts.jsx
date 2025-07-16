@@ -47,12 +47,21 @@ const Contacts = () => {
         page: currentPage
       });
 
-      setContacts(response.data.contatos || []);
-      setTotalContacts(response.data.total || 0);
+      console.log('Resposta da API:', response.data);
+
+      // Corrigir o mapeamento dos dados
+      if (response.data && response.data.data) {
+        setContacts(response.data.data);
+        setTotalContacts(response.data.pagination?.total || 0);
+      } else {
+        setContacts([]);
+        setTotalContacts(0);
+      }
 
     } catch (err) {
       console.error('Erro ao buscar contatos:', err);
       setError('Erro ao carregar contatos');
+      setContacts([]);
     } finally {
       setIsLoading(false);
     }
@@ -62,7 +71,7 @@ const Contacts = () => {
     fetchContacts();
   }, [searchTerm, currentPage]);
 
-  // Tags disponíveis (simplificado)
+  // Tags disponíveis
   const availableTags = ['Cliente VIP', 'Prospect', 'Lead Frio', 'Em Negociação', 'Quente', 'WhatsApp', 'Instagram'];
 
   // Criar novo contato
@@ -86,45 +95,25 @@ const Contacts = () => {
         cargo: ''
       });
       
-      fetchContacts(); // Recarregar lista
+      fetchContacts();
       
     } catch (err) {
       alert(err.response?.data?.error || 'Erro ao criar contato');
     }
   };
 
-  // Importar contatos
-  const handleImport = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+  // Excluir contato
+  const handleDeleteContact = async (id) => {
+    if (!window.confirm('Tem certeza que deseja excluir este contato?')) return;
+    
     try {
-      setUploadProgress({ status: 'uploading', message: 'Enviando arquivo...' });
-      
-      const response = await contactsService.import(formData);
-      
-      setUploadProgress({
-        status: 'success',
-        message: `Importação concluída! ${response.data.criados} criados, ${response.data.atualizados} atualizados.`,
-        details: response.data
-      });
-      
-      fetchContacts(); // Recarregar lista
-      
-      setTimeout(() => {
-        setShowImportModal(false);
-        setUploadProgress(null);
-      }, 3000);
-      
+      await contactsService.delete(id);
+      if (selectedContact?.id === id) {
+        setSelectedContact(null);
+      }
+      fetchContacts();
     } catch (err) {
-      setUploadProgress({
-        status: 'error',
-        message: 'Erro ao importar arquivo',
-        error: err.response?.data?.error
-      });
+      alert('Erro ao excluir contato');
     }
   };
 
@@ -133,7 +122,6 @@ const Contacts = () => {
     try {
       const response = await contactsService.export();
       
-      // Criar link de download
       const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -145,23 +133,22 @@ const Contacts = () => {
     }
   };
 
-  // Baixar template
-  const handleDownloadTemplate = async () => {
-    try {
-      const response = await contactsService.getTemplate();
-      
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'template_contatos.csv';
-      link.click();
-      
-    } catch (err) {
-      alert('Erro ao baixar template');
-    }
+  // Formatar telefone
+  const formatPhone = (phone) => {
+    if (!phone) return '';
+    return phone.replace(/\D/g, '')
+      .replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
   };
 
-  const filteredContacts = contacts; // Já vem filtrado da API
+  // Obter cor do status
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'quente': return 'bg-red-100 text-red-800';
+      case 'morno': return 'bg-yellow-100 text-yellow-800';
+      case 'frio': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   if (isLoading && contacts.length === 0) {
     return (
@@ -184,7 +171,7 @@ const Contacts = () => {
               <h1 className="text-2xl font-bold text-gray-900">Contatos</h1>
               <p className="text-sm text-gray-500">
                 {totalContacts > 0 
-                  ? `${totalContacts} contatos encontrados`
+                  ? `${totalContacts} contatos cadastrados`
                   : 'Nenhum contato ainda'
                 }
               </p>
@@ -192,19 +179,19 @@ const Contacts = () => {
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowImportModal(true)}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
               >
                 <Upload size={18} />
-                <span className="hidden sm:inline">Importar</span>
+                <span>Importar</span>
               </button>
               <button
                 onClick={handleExport}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
               >
                 <Download size={18} />
-                <span className="hidden sm:inline">Exportar</span>
+                <span>Exportar</span>
               </button>
-              <button 
+              <button
                 onClick={() => setShowCreateModal(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
               >
@@ -213,385 +200,267 @@ const Contacts = () => {
               </button>
             </div>
           </div>
-        </div>
-      </header>
 
-      <div className="p-4 sm:p-6 lg:p-8">
-        {/* Filtros */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4">
+          {/* Barra de pesquisa */}
+          <div className="mt-4 flex items-center space-x-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
+                placeholder="Buscar por nome, email ou empresa..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nome, email ou empresa..."
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <button 
-              onClick={fetchContacts}
-              className="p-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
-              title="Atualizar"
-            >
-              <RefreshCw size={18} />
+            <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+              <Filter size={20} />
             </button>
           </div>
         </div>
+      </header>
 
-        {/* Lista de Contatos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              {filteredContacts.length > 0 ? (
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contato
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Tags
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Score
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Último Contato
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Ações
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredContacts.map((contact) => (
-                      <tr 
-                        key={contact.id}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedContact(contact)}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                              {contact.nome.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">{contact.nome}</p>
-                              <p className="text-sm text-gray-500">{contact.empresa || 'Sem empresa'}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {contact.tags?.slice(0, 2).map((tag, i) => (
-                              <span key={i} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
-                                {tag}
-                              </span>
-                            ))}
-                            {contact.tags?.length > 2 && (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full">
-                                +{contact.tags.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center space-x-2">
-                            <div className="flex-1 max-w-[100px]">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-medium text-gray-700">{contact.score}</span>
-                                <span className="text-xs text-gray-500">Score</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className={`h-2 rounded-full transition-all ${
-                                    contact.score >= 80 ? 'bg-green-500' : 
-                                    contact.score >= 60 ? 'bg-yellow-500' : 
-                                    'bg-red-500'
-                                  }`}
-                                  style={{ width: `${contact.score}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {contact.ultimoContato}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end space-x-1">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`tel:${contact.telefone}`);
-                              }}
-                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-all"
-                            >
-                              <Phone size={16} />
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`mailto:${contact.email}`);
-                              }}
-                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-all"
-                            >
-                              <Mail size={16} />
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`https://wa.me/${contact.whatsapp?.replace(/\D/g, '')}`);
-                              }}
-                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-all"
-                            >
-                              <MessageCircle size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="text-center py-12">
-                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">Nenhum contato encontrado</h3>
-                  <p className="text-gray-500 mb-4">Comece importando uma lista ou criando manualmente</p>
-                  <div className="flex items-center justify-center space-x-3">
-                    <button
-                      onClick={() => setShowImportModal(true)}
-                      className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-                    >
-                      <Upload size={18} className="inline mr-2" />
-                      Importar CSV
-                    </button>
-                    <button
-                      onClick={() => setShowCreateModal(true)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      <Plus size={18} className="inline mr-2" />
-                      Criar Contato
-                    </button>
-                  </div>
-                </div>
-              )}
+      <div className="flex h-full">
+        {/* Lista de contatos */}
+        <div className="flex-1 p-4">
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+              <span className="text-red-600">{error}</span>
             </div>
-          </div>
+          )}
 
-          {/* Detalhes do Contato */}
-          {selectedContact ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex items-center space-x-3">
-                  <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-semibold">
-                    {selectedContact.nome.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">{selectedContact.nome}</h2>
-                    <p className="text-gray-500">{selectedContact.empresa || 'Sem empresa'}</p>
-                  </div>
-                </div>
-                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Edit2 size={18} />
+          {contacts.length === 0 && !isLoading ? (
+            <div className="bg-white rounded-xl p-8 text-center">
+              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum contato encontrado</h3>
+              <p className="text-gray-500 mb-4">
+                Comece importando uma lista ou criando manualmente
+              </p>
+              <div className="flex items-center justify-center space-x-3">
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
+                >
+                  <Upload size={18} />
+                  <span>Importar CSV</span>
                 </button>
-              </div>
-
-              {/* Informações básicas */}
-              <div className="space-y-3 mb-6">
-                {selectedContact.email && (
-                  <div className="flex items-center space-x-3 text-sm">
-                    <Mail className="text-gray-400" size={16} />
-                    <span className="text-gray-700">{selectedContact.email}</span>
-                  </div>
-                )}
-                {selectedContact.telefone && (
-                  <div className="flex items-center space-x-3 text-sm">
-                    <Phone className="text-gray-400" size={16} />
-                    <span className="text-gray-700">{selectedContact.telefone}</span>
-                  </div>
-                )}
-                {selectedContact.whatsapp && (
-                  <div className="flex items-center space-x-3 text-sm">
-                    <MessageCircle className="text-gray-400" size={16} />
-                    <span className="text-gray-700">{selectedContact.whatsapp}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Tags */}
-              <div className="mb-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Tags</h3>
-                <div className="flex flex-wrap gap-2">
-                  {selectedContact.tags?.map((tag, i) => (
-                    <span key={i} className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
-                      {tag}
-                    </span>
-                  ))}
-                  <button className="px-3 py-1 border border-dashed border-gray-300 text-gray-500 text-sm rounded-full hover:border-gray-400 hover:text-gray-600 transition-colors">
-                    <Plus size={14} className="inline" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Informações Adicionais */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Informações Adicionais</h3>
-                <div className="space-y-3">
-                  {selectedContact.cpf_cnpj && (
-                    <div className="flex justify-between items-start">
-                      <span className="text-sm text-gray-600">CPF/CNPJ:</span>
-                      <span className="text-sm font-medium text-gray-900">{selectedContact.cpf_cnpj}</span>
-                    </div>
-                  )}
-                  {selectedContact.cargo && (
-                    <div className="flex justify-between items-start">
-                      <span className="text-sm text-gray-600">Cargo:</span>
-                      <span className="text-sm font-medium text-gray-900">{selectedContact.cargo}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-start">
-                    <span className="text-sm text-gray-600">Origem:</span>
-                    <span className="text-sm font-medium text-gray-900">{selectedContact.origem || 'Manual'}</span>
-                  </div>
-                  {selectedContact.valorTotal > 0 && (
-                    <div className="flex justify-between items-start">
-                      <span className="text-sm text-gray-600">Valor em negócios:</span>
-                      <span className="text-sm font-medium text-gray-900">
-                        R$ {selectedContact.valorTotal.toLocaleString('pt-BR')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Ações */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => window.open(`https://wa.me/${selectedContact.whatsapp?.replace(/\D/g, '')}`)}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <MessageCircle size={16} />
-                    <span>WhatsApp</span>
-                  </button>
-                  <button 
-                    onClick={() => window.open(`mailto:${selectedContact.email}`)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Mail size={16} />
-                    <span>Email</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <Plus size={18} />
+                  <span>Criar Contato</span>
+                </button>
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>Selecione um contato para ver os detalhes</p>
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contato
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Empresa
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contatos
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Valor
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Última Interação
+                    </th>
+                    <th className="relative px-6 py-3">
+                      <span className="sr-only">Ações</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {contacts.map((contact) => (
+                    <tr
+                      key={contact.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => setSelectedContact(contact)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {contact.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {contact.email}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{contact.company || '-'}</div>
+                        <div className="text-sm text-gray-500">{contact.role || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(contact.status)}`}>
+                          {contact.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-3">
+                          {contact.phone && (
+                            <button className="text-gray-400 hover:text-gray-600">
+                              <Phone size={16} />
+                            </button>
+                          )}
+                          {contact.email && (
+                            <button className="text-gray-400 hover:text-gray-600">
+                              <Mail size={16} />
+                            </button>
+                          )}
+                          <button className="text-gray-400 hover:text-gray-600">
+                            <MessageCircle size={16} />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {contact.value > 0 
+                          ? new Intl.NumberFormat('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL'
+                            }).format(contact.value)
+                          : '-'
+                        }
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {contact.lastContact || 'Nunca'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteContact(contact.id);
+                          }}
+                          className="text-gray-400 hover:text-red-600"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Paginação */}
+          {totalContacts > 20 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-700">
+                Mostrando {((currentPage - 1) * 20) + 1} a {Math.min(currentPage * 20, totalContacts)} de {totalContacts} contatos
+              </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage * 20 >= totalContacts}
+                  className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50"
+                >
+                  Próxima
+                </button>
               </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Modal de Importação */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Importar Contatos</h2>
+        {/* Detalhes do contato selecionado */}
+        {selectedContact && (
+          <div className="w-96 bg-white border-l border-gray-200 p-6 overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Detalhes do Contato</h2>
               <button
-                onClick={() => {
-                  setShowImportModal(false);
-                  setUploadProgress(null);
-                }}
+                onClick={() => setSelectedContact(null)}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X size={20} />
               </button>
             </div>
-            
-            {!uploadProgress ? (
-              <>
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Faça upload de um arquivo CSV com seus contatos. 
-                    O arquivo deve conter colunas para Nome, Email, Telefone e Empresa.
-                  </p>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                    <label className="cursor-pointer">
-                      <span className="text-blue-600 hover:text-blue-700 font-medium">
-                        Clique para selecionar
-                      </span>
-                      <span className="text-gray-600"> ou arraste o arquivo aqui</span>
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleImport}
-                        className="hidden"
-                      />
-                    </label>
-                    <p className="text-xs text-gray-500 mt-2">Apenas arquivos CSV (máx. 10MB)</p>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">{selectedContact.name}</h3>
+                <p className="text-sm text-gray-500">{selectedContact.company}</p>
+              </div>
+
+              <div className="space-y-3">
+                {selectedContact.email && (
+                  <div className="flex items-center space-x-2">
+                    <Mail className="w-4 h-4 text-gray-400" />
+                    <a href={`mailto:${selectedContact.email}`} className="text-sm text-blue-600 hover:underline">
+                      {selectedContact.email}
+                    </a>
                   </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <button 
-                    onClick={handleDownloadTemplate}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    Baixar modelo
-                  </button>
-                  <button
-                    onClick={() => setShowImportModal(false)}
-                    className="px-4 py-2 text-gray-700 hover:text-gray-900"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-6">
-                {uploadProgress.status === 'uploading' && (
-                  <>
-                    <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-                    <p className="text-gray-700">{uploadProgress.message}</p>
-                  </>
                 )}
-                {uploadProgress.status === 'success' && (
-                  <>
-                    <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
-                    <p className="text-gray-700 font-medium">{uploadProgress.message}</p>
-                    {uploadProgress.details?.detalhesErros?.length > 0 && (
-                      <p className="text-sm text-red-600 mt-2">
-                        {uploadProgress.details.detalhesErros.length} erros encontrados
-                      </p>
-                    )}
-                  </>
+
+                {selectedContact.phone && (
+                  <div className="flex items-center space-x-2">
+                    <Phone className="w-4 h-4 text-gray-400" />
+                    <a href={`tel:${selectedContact.phone}`} className="text-sm text-blue-600 hover:underline">
+                      {formatPhone(selectedContact.phone)}
+                    </a>
+                  </div>
                 )}
-                {uploadProgress.status === 'error' && (
-                  <>
-                    <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
-                    <p className="text-gray-700 font-medium">{uploadProgress.message}</p>
-                    <p className="text-sm text-red-600 mt-2">{uploadProgress.error}</p>
-                  </>
+
+                {selectedContact.source && (
+                  <div className="flex items-center space-x-2">
+                    <Tag className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-600">Origem: {selectedContact.source}</span>
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Modal de Criar Contato */}
+              <div className="pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Score</h4>
+                <div className="flex items-center space-x-2">
+                  <div className="flex-1 bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${selectedContact.score}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">{selectedContact.score}%</span>
+                </div>
+              </div>
+
+              <div className="pt-4 space-y-2">
+                <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2">
+                  <MessageCircle size={18} />
+                  <span>Iniciar Conversa</span>
+                </button>
+                <button className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center space-x-2">
+                  <Edit2 size={18} />
+                  <span>Editar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal de criar contato */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Novo Contato</h2>
+              <h2 className="text-xl font-semibold">Novo Contato</h2>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -599,7 +468,7 @@ const Contacts = () => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -613,7 +482,7 @@ const Contacts = () => {
                   placeholder="João Silva"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
@@ -623,10 +492,10 @@ const Contacts = () => {
                   value={newContact.email}
                   onChange={(e) => setNewContact({...newContact, email: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="joao@exemplo.com"
+                  placeholder="joao@empresa.com"
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -640,7 +509,7 @@ const Contacts = () => {
                     placeholder="(11) 98765-4321"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     WhatsApp
@@ -654,7 +523,7 @@ const Contacts = () => {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Empresa
@@ -667,36 +536,21 @@ const Contacts = () => {
                   placeholder="Nome da Empresa"
                 />
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    CPF/CNPJ
-                  </label>
-                  <input
-                    type="text"
-                    value={newContact.cpf_cnpj}
-                    onChange={(e) => setNewContact({...newContact, cpf_cnpj: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="123.456.789-00"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cargo
-                  </label>
-                  <input
-                    type="text"
-                    value={newContact.cargo}
-                    onChange={(e) => setNewContact({...newContact, cargo: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Diretor"
-                  />
-                </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cargo
+                </label>
+                <input
+                  type="text"
+                  value={newContact.cargo}
+                  onChange={(e) => setNewContact({...newContact, cargo: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Diretor"
+                />
               </div>
             </div>
-            
+
             <div className="flex items-center justify-end space-x-3 mt-6">
               <button
                 onClick={() => setShowCreateModal(false)}
